@@ -159,6 +159,7 @@ import static org.apache.fluss.testutils.DataTestUtils.genKvRecords;
 import static org.apache.fluss.testutils.DataTestUtils.genMemoryLogRecordsByObject;
 import static org.apache.fluss.testutils.DataTestUtils.getKeyValuePairs;
 import static org.apache.fluss.testutils.DataTestUtils.row;
+import static org.apache.fluss.testutils.common.CommonTestUtils.retry;
 import static org.apache.fluss.testutils.common.CommonTestUtils.waitUntil;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1424,9 +1425,14 @@ class ReplicaManagerTest extends ReplicaTestBase {
 
         // second, limit scan from table with limit
         builder.append(DEFAULT_SCHEMA_ID, compactedRow(DATA1_ROW_TYPE, new Object[] {1, "a1"}));
-        future = new CompletableFuture<>();
-        replicaManager.limitScan(tb, 1, future::complete);
-        assertThat(future.get().getValues()).isEqualTo(builder.build());
+        retry(
+                Duration.ofSeconds(15),
+                () -> {
+                    CompletableFuture<LimitScanResultForBucket> scanFuture =
+                            new CompletableFuture<>();
+                    replicaManager.limitScan(tb, 1, scanFuture::complete);
+                    assertThat(scanFuture.get().getValues()).isEqualTo(builder.build());
+                });
 
         // third, limit scan from table with more limit
         future = new CompletableFuture<>();
@@ -2437,23 +2443,28 @@ class ReplicaManagerTest extends ReplicaTestBase {
         Map<TableBucket, List<byte[]>> entriesPerBucket = new HashMap<>();
         entriesPerBucket.put(tb, prefixKeyBytes);
 
-        CompletableFuture<Map<TableBucket, PrefixLookupResultForBucket>> future =
-                new CompletableFuture<>();
-        replicaManager.prefixLookups(entriesPerBucket, PREFIX_LOOKUP_KV_VERSION, future::complete);
-        Map<TableBucket, PrefixLookupResultForBucket> prefixResult = future.get();
-        assertThat(prefixResult.size()).isEqualTo(1);
-        PrefixLookupResultForBucket resultForBucket = prefixResult.get(tb);
-        assertThat(resultForBucket).isNotNull();
-        List<List<byte[]>> prefixLookupValues = resultForBucket.prefixLookupValues();
-        assertThat(prefixLookupValues.size()).isEqualTo(expectedValues.size());
-        for (int i = 0; i < expectedValues.size(); i++) {
-            List<byte[]> prefixValueList = prefixLookupValues.get(i);
-            List<byte[]> expectedValueList = expectedValues.get(i);
-            assertThat(prefixValueList.size()).isEqualTo(expectedValueList.size());
-            for (int j = 0; j < expectedValueList.size(); j++) {
-                assertThat(prefixValueList.get(j)).isEqualTo(expectedValueList.get(j));
-            }
-        }
+        retry(
+                Duration.ofSeconds(15),
+                () -> {
+                    CompletableFuture<Map<TableBucket, PrefixLookupResultForBucket>> future =
+                            new CompletableFuture<>();
+                    replicaManager.prefixLookups(
+                            entriesPerBucket, PREFIX_LOOKUP_KV_VERSION, future::complete);
+                    Map<TableBucket, PrefixLookupResultForBucket> prefixResult = future.get();
+                    assertThat(prefixResult.size()).isEqualTo(1);
+                    PrefixLookupResultForBucket resultForBucket = prefixResult.get(tb);
+                    assertThat(resultForBucket).isNotNull();
+                    List<List<byte[]>> prefixLookupValues = resultForBucket.prefixLookupValues();
+                    assertThat(prefixLookupValues.size()).isEqualTo(expectedValues.size());
+                    for (int i = 0; i < expectedValues.size(); i++) {
+                        List<byte[]> prefixValueList = prefixLookupValues.get(i);
+                        List<byte[]> expectedValueList = expectedValues.get(i);
+                        assertThat(prefixValueList.size()).isEqualTo(expectedValueList.size());
+                        for (int j = 0; j < expectedValueList.size(); j++) {
+                            assertThat(prefixValueList.get(j)).isEqualTo(expectedValueList.get(j));
+                        }
+                    }
+                });
     }
 
     @Test

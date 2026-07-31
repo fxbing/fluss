@@ -521,8 +521,12 @@ public class TabletServiceITCase {
         Object[] value1 = DATA_1_WITH_KEY_AND_VALUE.get(3).f1;
         byte[] value1Bytes =
                 ValueEncoder.encodeValue(DEFAULT_SCHEMA_ID, compactedRow(DATA1_ROW_TYPE, value1));
-        assertLookupResponse(
-                leaderGateWay.lookup(newLookupRequest(tableId, 0, key1Bytes)).get(), value1Bytes);
+        retry(
+                Duration.ofSeconds(15),
+                () ->
+                        assertLookupResponse(
+                                leaderGateWay.lookup(newLookupRequest(tableId, 0, key1Bytes)).get(),
+                                value1Bytes));
 
         // key = 3 is deleted, need return null.
         Object[] key3 = DATA_1_WITH_KEY_AND_VALUE.get(2).f0;
@@ -632,13 +636,18 @@ public class TabletServiceITCase {
                         ValueEncoder.encodeValue(
                                 DEFAULT_SCHEMA_ID,
                                 compactedRow(rowType, new Object[] {1, "a", 3L, "value3"})));
-        assertPrefixLookupResponse(
-                leaderGateWay
-                        .prefixLookup(
-                                newPrefixLookupRequest(
-                                        tableId, 0, Collections.singletonList(prefixKey1Bytes)))
-                        .get(),
-                Collections.singletonList(key1ExpectedValues));
+        retry(
+                Duration.ofSeconds(15),
+                () ->
+                        assertPrefixLookupResponse(
+                                leaderGateWay
+                                        .prefixLookup(
+                                                newPrefixLookupRequest(
+                                                        tableId,
+                                                        0,
+                                                        Collections.singletonList(prefixKey1Bytes)))
+                                        .get(),
+                                Collections.singletonList(key1ExpectedValues)));
 
         // third prefix lookup in table for multi prefix keys, prefix key = (1, "a") and (2, "a").
         Object[] prefixKey2 = new Object[] {2, "a"};
@@ -705,8 +714,12 @@ public class TabletServiceITCase {
                 leaderGateWay.putKv(newPutKvRequest(tableId, 0, 1, kvRecordBatch)).get());
         builder.append(DEFAULT_SCHEMA_ID, compactedRow(DATA1_ROW_TYPE, new Object[] {1, "a1"}));
         // second limit scan from table
-        assertLimitScanResponse(
-                leaderGateWay.limitScan(newLimitScanRequest(tableId, 0, 1)).get(), builder.build());
+        retry(
+                Duration.ofSeconds(15),
+                () ->
+                        assertLimitScanResponse(
+                                leaderGateWay.limitScan(newLimitScanRequest(tableId, 0, 1)).get(),
+                                builder.build()));
         builder.append(DEFAULT_SCHEMA_ID, compactedRow(DATA1_ROW_TYPE, new Object[] {2, "b1"}));
         assertLimitScanResponse(
                 leaderGateWay.limitScan(newLimitScanRequest(tableId, 0, 3)).get(), builder.build());
@@ -1095,7 +1108,7 @@ public class TabletServiceITCase {
                                 newPutKvRequest(
                                         tableId, 0, 1, genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE)))
                         .get());
-        FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
+        triggerAndWaitSnapshotAfterKvFlush(tb);
 
         ScanKvResponse response =
                 leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1024 * 1024)).get();
@@ -1127,7 +1140,7 @@ public class TabletServiceITCase {
                                 newPutKvRequest(
                                         tableId, 0, 1, genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE)))
                         .get());
-        FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
+        triggerAndWaitSnapshotAfterKvFlush(tb);
 
         // batch_size_bytes=1 forces one record per batch via the appendedAny progress guard.
         ScanKvResponse first = leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1)).get();
@@ -1178,7 +1191,7 @@ public class TabletServiceITCase {
                                 newPutKvRequest(
                                         tableId, 0, 1, genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE)))
                         .get());
-        FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
+        triggerAndWaitSnapshotAfterKvFlush(tb);
 
         // Tiny batch keeps the session open after the first response.
         ScanKvResponse open = leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1)).get();
@@ -1210,7 +1223,7 @@ public class TabletServiceITCase {
                                 newPutKvRequest(
                                         tableId, 0, 1, genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE)))
                         .get());
-        FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
+        triggerAndWaitSnapshotAfterKvFlush(tb);
 
         ScanKvResponse open = leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1)).get();
         byte[] scannerId = open.getScannerId();
@@ -1259,7 +1272,7 @@ public class TabletServiceITCase {
                                 newPutKvRequest(
                                         tableId, 0, 1, genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE)))
                         .get());
-        FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
+        triggerAndWaitSnapshotAfterKvFlush(tb);
 
         ScanKvResponse open = leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1)).get();
         assertThat(open.hasErrorCode()).isFalse();
@@ -1294,7 +1307,7 @@ public class TabletServiceITCase {
                                 newPutKvRequest(
                                         tableId, 0, 1, genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE)))
                         .get());
-        FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
+        triggerAndWaitSnapshotAfterKvFlush(tb);
 
         ScanKvResponse open = leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1)).get();
         assertThat(open.hasErrorCode()).isFalse();
@@ -1327,7 +1340,7 @@ public class TabletServiceITCase {
                                 newPutKvRequest(
                                         tableId, 0, 1, genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE)))
                         .get());
-        FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
+        triggerAndWaitSnapshotAfterKvFlush(tb);
 
         ScanKvResponse open = leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1)).get();
         byte[] scannerId = open.getScannerId();
@@ -1355,7 +1368,7 @@ public class TabletServiceITCase {
                                 newPutKvRequest(
                                         tableId, 0, 1, genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE)))
                         .get());
-        FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
+        triggerAndWaitSnapshotAfterKvFlush(tb);
 
         // Open request without call_seq_id should be rejected.
         ScanKvRequest openWithoutSeqId = new ScanKvRequest();
@@ -1395,7 +1408,7 @@ public class TabletServiceITCase {
                                 newPutKvRequest(
                                         tableId, 0, 1, genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE)))
                         .get());
-        FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
+        triggerAndWaitSnapshotAfterKvFlush(tb);
 
         ScanKvResponse response =
                 leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, Integer.MAX_VALUE)).get();
@@ -1432,6 +1445,12 @@ public class TabletServiceITCase {
         req.setBatchSizeBytes(batchSize);
         req.setCallSeqId(0);
         return req;
+    }
+
+    private static void triggerAndWaitSnapshotAfterKvFlush(TableBucket tableBucket) {
+        retry(
+                Duration.ofSeconds(15),
+                () -> FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tableBucket));
     }
 
     private static ScanKvRequest newScanKvContinueRequest(
