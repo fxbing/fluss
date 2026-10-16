@@ -45,6 +45,7 @@ class MultiTableWriteRecordTest {
         assertThat(rec.getOperation()).isEqualTo(MultiTableWriteRecord.Operation.APPEND);
         assertThat(rec.getRow()).isSameAs(row);
         assertThat(rec.getSchemaId()).isEqualTo(5);
+        assertThat(rec.getBucketId()).isNull();
     }
 
     @Test
@@ -70,6 +71,36 @@ class MultiTableWriteRecordTest {
                 .contains("tablePath=" + TP)
                 .contains("operation=DELETE")
                 .contains("schemaId=3");
+    }
+
+    @Test
+    void testExplicitBucketFactories() {
+        InternalRow row = newRow();
+        MultiTableWriteRecord append = MultiTableWriteRecord.forAppend(TP, row, 5, 1);
+        MultiTableWriteRecord upsert = MultiTableWriteRecord.forUpsert(TP, row, 5, 2);
+        MultiTableWriteRecord delete = MultiTableWriteRecord.forDelete(TP, row, 5, 3);
+
+        assertThat(append.getOperation()).isEqualTo(MultiTableWriteRecord.Operation.APPEND);
+        assertThat(append.getBucketId()).isEqualTo(1);
+        assertThat(upsert.getOperation()).isEqualTo(MultiTableWriteRecord.Operation.UPSERT);
+        assertThat(upsert.getBucketId()).isEqualTo(2);
+        assertThat(delete.getOperation()).isEqualTo(MultiTableWriteRecord.Operation.DELETE);
+        assertThat(delete.getBucketId()).isEqualTo(3);
+        assertThat(append.getRow()).isSameAs(row);
+        assertThat(append.getSchemaId()).isEqualTo(5);
+    }
+
+    @Test
+    void testRejectsNegativeBucket() {
+        assertThatThrownBy(() -> MultiTableWriteRecord.forAppend(TP, newRow(), 1, -1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("bucketId");
+        assertThatThrownBy(() -> MultiTableWriteRecord.forUpsert(TP, newRow(), 1, -1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("bucketId");
+        assertThatThrownBy(() -> MultiTableWriteRecord.forDelete(TP, newRow(), 1, -1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("bucketId");
     }
 
     @Test

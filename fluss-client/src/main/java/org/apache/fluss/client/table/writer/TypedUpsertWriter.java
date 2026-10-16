@@ -18,6 +18,8 @@
 package org.apache.fluss.client.table.writer;
 
 import org.apache.fluss.annotation.PublicEvolving;
+import org.apache.fluss.exception.FlussRuntimeException;
+import org.apache.fluss.row.InternalRow;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -39,10 +41,42 @@ public interface TypedUpsertWriter<T> extends TableWriter {
     CompletableFuture<UpsertResult> upsert(T record);
 
     /**
+     * Upsert a record in the specified bucket of its target table or partition. The bucket must
+     * match the bucket key's normal hash routing.
+     *
+     * <p>This call may block while resolving the target table or partition's bucket metadata.
+     *
+     * @param record the record to upsert
+     * @param bucketId the zero-based target bucket ID, less than the target bucket count
+     * @return the upsert result
+     * @throws IllegalArgumentException if the bucket ID is negative
+     * @throws FlussRuntimeException if the bucket ID is out of range or does not match the bucket
+     *     key
+     * @see UpsertWriter#upsert(InternalRow, int)
+     */
+    CompletableFuture<UpsertResult> upsert(T record, int bucketId);
+
+    /**
      * Delete a certain record from the Fluss table. The input must contain the primary key fields.
      *
      * @param record the record to delete.
      * @return A {@link CompletableFuture} that always delete result when complete normally.
      */
     CompletableFuture<DeleteResult> delete(T record);
+
+    /**
+     * Delete a record in the specified bucket of its target table or partition. The bucket must
+     * match the bucket key's normal hash routing.
+     *
+     * <p>This call may block while resolving the target table or partition's bucket metadata.
+     *
+     * @param record the record to delete; it must contain the primary key fields
+     * @param bucketId the zero-based target bucket ID, less than the target bucket count
+     * @return the delete result
+     * @throws IllegalArgumentException if the bucket ID is negative
+     * @throws FlussRuntimeException if the bucket ID is out of range or does not match the bucket
+     *     key
+     * @see UpsertWriter#delete(InternalRow, int)
+     */
+    CompletableFuture<DeleteResult> delete(T record, int bucketId);
 }

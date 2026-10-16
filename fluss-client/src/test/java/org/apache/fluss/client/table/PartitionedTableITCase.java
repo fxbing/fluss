@@ -34,6 +34,8 @@ import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.types.DataTypes;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -208,8 +210,9 @@ class PartitionedTableITCase extends ClientToServerITCaseBase {
         verifyPartitionLogs(table, schema.getRowType(), expectPartitionIdAndAppendRows);
     }
 
-    @Test
-    void testCreatePartitionExceedMaxPartitionNumber() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void testCreatePartitionExceedMaxPartitionNumber(boolean explicitBucket) throws Exception {
         // test make partition number exceed max partition number 10 (set in
         // ClientToServerITCaseBase).
         createPartitionedTable(DATA1_TABLE_PATH_PK, true);
@@ -227,8 +230,9 @@ class PartitionedTableITCase extends ClientToServerITCaseBase {
         // must preserve the creation error and stop accepting writes to unresolved partitions.
         assertThatThrownBy(
                         () ->
-                                upsertWriter
-                                        .upsert(row(10, "a" + 10, "10"))
+                                (explicitBucket
+                                                ? upsertWriter.upsert(row(10, "a" + 10, "10"), 0)
+                                                : upsertWriter.upsert(row(10, "a" + 10, "10")))
                                         .get(10, TimeUnit.SECONDS))
                 .rootCause()
                 .isInstanceOf(TooManyPartitionsException.class)

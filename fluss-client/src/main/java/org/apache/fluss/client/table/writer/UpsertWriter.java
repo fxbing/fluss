@@ -18,6 +18,7 @@
 package org.apache.fluss.client.table.writer;
 
 import org.apache.fluss.annotation.PublicEvolving;
+import org.apache.fluss.exception.FlussRuntimeException;
 import org.apache.fluss.row.InternalRow;
 
 import java.util.concurrent.CompletableFuture;
@@ -39,10 +40,44 @@ public interface UpsertWriter extends TableWriter {
     CompletableFuture<UpsertResult> upsert(InternalRow record);
 
     /**
+     * Upsert a record in the specified bucket of its target table or partition.
+     *
+     * <p>For tables with bucket keys, the bucket must match the bucket determined by the record's
+     * bucket key. This preserves routing for lookups and subsequent writes.
+     *
+     * <p>This call may block while resolving the target table or partition's bucket metadata.
+     *
+     * @param record the record to upsert
+     * @param bucketId the zero-based target bucket id, less than the target bucket count
+     * @return a future with the write result
+     * @throws IllegalArgumentException if the bucket id is negative
+     * @throws FlussRuntimeException if the bucket id is out of range or does not match the bucket
+     *     key
+     */
+    CompletableFuture<UpsertResult> upsert(InternalRow record, int bucketId);
+
+    /**
      * Delete a certain record from the Fluss table. The input must contain the primary key fields.
      *
      * @param record the record to delete.
      * @return A {@link CompletableFuture} that always delete result when complete normally.
      */
     CompletableFuture<DeleteResult> delete(InternalRow record);
+
+    /**
+     * Delete a record in the specified bucket of its target table or partition.
+     *
+     * <p>For tables with bucket keys, the bucket must match the bucket determined by the record's
+     * bucket key. This preserves routing for lookups and subsequent writes.
+     *
+     * <p>This call may block while resolving the target table or partition's bucket metadata.
+     *
+     * @param record the record to delete
+     * @param bucketId the zero-based target bucket id, less than the target bucket count
+     * @return a future with the write result
+     * @throws IllegalArgumentException if the bucket id is negative
+     * @throws FlussRuntimeException if the bucket id is out of range or does not match the bucket
+     *     key
+     */
+    CompletableFuture<DeleteResult> delete(InternalRow record, int bucketId);
 }

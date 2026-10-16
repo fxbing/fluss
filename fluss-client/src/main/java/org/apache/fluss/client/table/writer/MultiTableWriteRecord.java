@@ -18,9 +18,13 @@
 package org.apache.fluss.client.table.writer;
 
 import org.apache.fluss.annotation.PublicEvolving;
+import org.apache.fluss.client.table.scanner.MultiTableRecord;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.row.InternalRow;
 
+import javax.annotation.Nullable;
+
+import static org.apache.fluss.utils.Preconditions.checkArgument;
 import static org.apache.fluss.utils.Preconditions.checkNotNull;
 
 /**
@@ -32,11 +36,16 @@ import static org.apache.fluss.utils.Preconditions.checkNotNull;
  *   <li>{@link #getRow()} &mdash; the row payload encoded against the table's schema
  *   <li>{@link #getSchemaId()} &mdash; the schema id the row was encoded against; must be a valid
  *       (positive) schema id obtained from table metadata
+ *   <li>{@link #getBucketId()} &mdash; optional target bucket within the target table or partition
  * </ul>
  *
  * <p>Server-assigned identity ({@code tableId}) and read-only metadata ({@code schema} object,
  * {@code logOffset}, {@code timestamp}) are intentionally absent here &mdash; they belong to the
- * read-side {@link org.apache.fluss.client.table.scanner.MultiTableRecord}.
+ * read-side {@link MultiTableRecord}.
+ *
+ * <p>Explicit bucket ids are zero-based and scoped to the target table or partition. Negative ids
+ * are rejected when a record is created; out-of-range ids and ids that disagree with a keyed
+ * table's routing are rejected when the record is written.
  *
  * <p>Instances are immutable.
  *
@@ -62,13 +71,20 @@ public final class MultiTableWriteRecord {
     private final Operation operation;
     private final InternalRow row;
     private final int schemaId;
+    @Nullable private final Integer bucketId;
 
     private MultiTableWriteRecord(
-            TablePath tablePath, Operation operation, InternalRow row, int schemaId) {
+            TablePath tablePath,
+            Operation operation,
+            InternalRow row,
+            int schemaId,
+            @Nullable Integer bucketId) {
         this.tablePath = checkNotNull(tablePath, "tablePath");
         this.operation = checkNotNull(operation, "operation");
         this.row = checkNotNull(row, "row");
         this.schemaId = schemaId;
+        checkArgument(bucketId == null || bucketId >= 0, "bucketId must be non-negative");
+        this.bucketId = bucketId;
     }
 
     /**
@@ -80,7 +96,21 @@ public final class MultiTableWriteRecord {
      */
     public static MultiTableWriteRecord forAppend(
             TablePath tablePath, InternalRow row, int schemaId) {
-        return new MultiTableWriteRecord(tablePath, Operation.APPEND, row, schemaId);
+        return new MultiTableWriteRecord(tablePath, Operation.APPEND, row, schemaId, null);
+    }
+
+    /**
+     * Build an append record for a log table with a target bucket. If the table has bucket keys,
+     * the bucket must match its bucket-key routing.
+     *
+     * @param tablePath target log table
+     * @param row the row payload
+     * @param schemaId the schema id the row was encoded against
+     * @param bucketId zero-based bucket id, less than the target table or partition's bucket count
+     */
+    public static MultiTableWriteRecord forAppend(
+            TablePath tablePath, InternalRow row, int schemaId, int bucketId) {
+        return new MultiTableWriteRecord(tablePath, Operation.APPEND, row, schemaId, bucketId);
     }
 
     /**
@@ -92,7 +122,21 @@ public final class MultiTableWriteRecord {
      */
     public static MultiTableWriteRecord forUpsert(
             TablePath tablePath, InternalRow row, int schemaId) {
-        return new MultiTableWriteRecord(tablePath, Operation.UPSERT, row, schemaId);
+        return new MultiTableWriteRecord(tablePath, Operation.UPSERT, row, schemaId, null);
+    }
+
+    /**
+     * Build an upsert record for a primary-key table with a target bucket. The bucket must match
+     * the target table's bucket-key routing.
+     *
+     * @param tablePath target primary-key table
+     * @param row the row payload
+     * @param schemaId the schema id the row was encoded against
+     * @param bucketId zero-based bucket id, less than the target table or partition's bucket count
+     */
+    public static MultiTableWriteRecord forUpsert(
+            TablePath tablePath, InternalRow row, int schemaId, int bucketId) {
+        return new MultiTableWriteRecord(tablePath, Operation.UPSERT, row, schemaId, bucketId);
     }
 
     /**
@@ -104,7 +148,21 @@ public final class MultiTableWriteRecord {
      */
     public static MultiTableWriteRecord forDelete(
             TablePath tablePath, InternalRow row, int schemaId) {
-        return new MultiTableWriteRecord(tablePath, Operation.DELETE, row, schemaId);
+        return new MultiTableWriteRecord(tablePath, Operation.DELETE, row, schemaId, null);
+    }
+
+    /**
+     * Build a delete record for a primary-key table with a target bucket. The bucket must match the
+     * target table's bucket-key routing.
+     *
+     * @param tablePath target primary-key table
+     * @param row the row payload
+     * @param schemaId the schema id the row was encoded against
+     * @param bucketId zero-based bucket id, less than the target table or partition's bucket count
+     */
+    public static MultiTableWriteRecord forDelete(
+            TablePath tablePath, InternalRow row, int schemaId, int bucketId) {
+        return new MultiTableWriteRecord(tablePath, Operation.DELETE, row, schemaId, bucketId);
     }
 
     public TablePath getTablePath() {
@@ -124,6 +182,12 @@ public final class MultiTableWriteRecord {
         return schemaId;
     }
 
+    /** Returns the requested bucket, or null when the writer should route the row. */
+    @Nullable
+    public Integer getBucketId() {
+        return bucketId;
+    }
+
     @Override
     public String toString() {
         return "MultiTableWriteRecord{"
@@ -133,6 +197,8 @@ public final class MultiTableWriteRecord {
                 + operation
                 + ", schemaId="
                 + schemaId
+                + ", bucketId="
+                + bucketId
                 + '}';
     }
 }

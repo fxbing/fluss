@@ -323,6 +323,35 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
     }
 
     @Test
+    void testTypedAppendToExplicitBucket() throws Exception {
+        TablePath path = TablePath.of("pojo_db", "explicit_bucket_log");
+        TableDescriptor td =
+                TableDescriptor.builder().schema(allTypesLogSchema()).distributedBy(2).build();
+        createTable(path, td, true);
+
+        try (Table table = conn.getTable(path)) {
+            TypedAppendWriter<AllTypesPojo> writer =
+                    table.newAppend().createTypedWriter(AllTypesPojo.class);
+            AllTypesPojo expected = newAllTypesPojo(1);
+            writer.append(expected, 1).get();
+
+            try (TypedLogScanner<AllTypesPojo> scanner =
+                    table.newScan().createTypedLogScanner(AllTypesPojo.class)) {
+                scanner.subscribeFromBeginning(1);
+                TypedScanRecords<AllTypesPojo> records;
+                do {
+                    records = scanner.poll(Duration.ofSeconds(2));
+                } while (records.isEmpty());
+                assertThat(records.count()).isEqualTo(1);
+                assertThat(records.buckets())
+                        .singleElement()
+                        .satisfies(bucket -> assertThat(bucket.getBucket()).isEqualTo(1));
+                assertThat(records.iterator().next().getValue()).isEqualTo(expected);
+            }
+        }
+    }
+
+    @Test
     void testTypedUpsertWriteAndScan() throws Exception {
         // Build all-types PK table schema (PK on 'a')
         Schema schema = allTypesPkSchema();
@@ -370,6 +399,30 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
             // ensure the last update_after reflects new value
             int lastIdx = changes.lastIndexOf(ChangeType.UPDATE_AFTER);
             assertThat(values.get(lastIdx)).isEqualTo(p1Updated);
+        }
+    }
+
+    @Test
+    void testTypedUpsertAndDeleteFromExplicitBucket() throws Exception {
+        TablePath path = TablePath.of("pojo_db", "explicit_bucket_pk");
+        TableDescriptor td =
+                TableDescriptor.builder().schema(allTypesPkSchema()).distributedBy(1, "a").build();
+        createTable(path, td, true);
+
+        try (Table table = conn.getTable(path)) {
+            TypedUpsertWriter<AllTypesPojo> writer =
+                    table.newUpsert().createTypedWriter(AllTypesPojo.class);
+            AllTypesPojo record = newAllTypesPojo(1);
+            assertThat(writer.upsert(record, 0).get().getBucket().getBucket()).isEqualTo(0);
+
+            TypedLookuper<PLookupKey> lookuper =
+                    table.newLookup().createTypedLookuper(PLookupKey.class);
+            assertThat(lookuper.lookup(new PLookupKey(1)).get().getSingletonRow()).isNotNull();
+
+            AllTypesPojo key = new AllTypesPojo();
+            key.a = 1;
+            assertThat(writer.delete(key, 0).get().getBucket().getBucket()).isEqualTo(0);
+            assertThat(lookuper.lookup(new PLookupKey(1)).get().getSingletonRow()).isNull();
         }
     }
 

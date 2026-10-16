@@ -175,6 +175,15 @@ class UpsertWriterImpl extends AbstractTableWriter implements UpsertWriter {
      */
     @Override
     public CompletableFuture<UpsertResult> upsert(InternalRow row) {
+        return upsert(row, null);
+    }
+
+    @Override
+    public CompletableFuture<UpsertResult> upsert(InternalRow row, int bucketId) {
+        return upsert(row, Integer.valueOf(bucketId));
+    }
+
+    private CompletableFuture<UpsertResult> upsert(InternalRow row, @Nullable Integer bucketId) {
         checkFieldCount(row);
         byte[] key = primaryKeyEncoder.encodeKey(row);
         byte[] bucketKey =
@@ -189,7 +198,8 @@ class UpsertWriterImpl extends AbstractTableWriter implements UpsertWriter {
                         writeFormat,
                         targetColumns,
                         mergeMode);
-        return sendWithResult(record, UpsertResult::new);
+        return sendWithResult(
+                bucketId == null ? record : record.withBucket(bucketId), UpsertResult::new);
     }
 
     /**
@@ -201,6 +211,15 @@ class UpsertWriterImpl extends AbstractTableWriter implements UpsertWriter {
      */
     @Override
     public CompletableFuture<DeleteResult> delete(InternalRow row) {
+        return delete(row, null);
+    }
+
+    @Override
+    public CompletableFuture<DeleteResult> delete(InternalRow row, int bucketId) {
+        return delete(row, Integer.valueOf(bucketId));
+    }
+
+    private CompletableFuture<DeleteResult> delete(InternalRow row, @Nullable Integer bucketId) {
         checkFieldCount(row);
         byte[] key = primaryKeyEncoder.encodeKey(row);
         byte[] bucketKey =
@@ -214,7 +233,8 @@ class UpsertWriterImpl extends AbstractTableWriter implements UpsertWriter {
                         writeFormat,
                         targetColumns,
                         mergeMode);
-        return sendWithResult(record, DeleteResult::new);
+        return sendWithResult(
+                bucketId == null ? record : record.withBucket(bucketId), DeleteResult::new);
     }
 
     private BinaryRow encodeRow(InternalRow row) {

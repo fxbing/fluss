@@ -81,12 +81,30 @@ class TypedUpsertWriterImpl<T> implements TypedUpsertWriter<T> {
     }
 
     @Override
+    public CompletableFuture<UpsertResult> upsert(T record, int bucketId) {
+        if (record instanceof InternalRow) {
+            return delegate.upsert((InternalRow) record, bucketId);
+        }
+        InternalRow row = convertPojo(record, /*forDelete=*/ false);
+        return delegate.upsert(row, bucketId);
+    }
+
+    @Override
     public CompletableFuture<DeleteResult> delete(T record) {
         if (record instanceof InternalRow) {
             return delegate.delete((InternalRow) record);
         }
         InternalRow pkOnly = convertPojo(record, /*forDelete=*/ true);
         return delegate.delete(pkOnly);
+    }
+
+    @Override
+    public CompletableFuture<DeleteResult> delete(T record, int bucketId) {
+        if (record instanceof InternalRow) {
+            return delegate.delete((InternalRow) record, bucketId);
+        }
+        InternalRow pkOnly = convertPojo(record, /*forDelete=*/ true);
+        return delegate.delete(pkOnly, bucketId);
     }
 
     private InternalRow convertPojo(T pojo, boolean forDelete) {

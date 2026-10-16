@@ -44,6 +44,11 @@ public class TestUpsertWriter implements UpsertWriter {
 
     @Override
     public CompletableFuture<UpsertResult> upsert(InternalRow record) {
+        return upsert(record, 0);
+    }
+
+    @Override
+    public CompletableFuture<UpsertResult> upsert(InternalRow record, int bucketId) {
         if (shouldFail) {
             CompletableFuture<UpsertResult> future = new CompletableFuture<>();
             future.completeExceptionally(new RuntimeException("Simulated write failure"));
@@ -52,11 +57,17 @@ public class TestUpsertWriter implements UpsertWriter {
         upsertCount++;
         lastUpsertedRow = record;
         allUpsertedRows.add(record);
-        return CompletableFuture.completedFuture(new UpsertResult(new TableBucket(1L, 0), 0L));
+        return CompletableFuture.completedFuture(
+                new UpsertResult(new TableBucket(1L, bucketId), 0L));
     }
 
     @Override
     public CompletableFuture<DeleteResult> delete(InternalRow record) {
+        return delete(record, 0);
+    }
+
+    @Override
+    public CompletableFuture<DeleteResult> delete(InternalRow record, int bucketId) {
         if (shouldFail) {
             CompletableFuture<DeleteResult> future = new CompletableFuture<>();
             future.completeExceptionally(new RuntimeException("Simulated write failure"));
@@ -65,7 +76,8 @@ public class TestUpsertWriter implements UpsertWriter {
         deleteCount++;
         lastDeletedRow = record;
         allDeletedRows.add(record);
-        return CompletableFuture.completedFuture(new DeleteResult(new TableBucket(1L, 0), 0L));
+        return CompletableFuture.completedFuture(
+                new DeleteResult(new TableBucket(1L, bucketId), 0L));
     }
 
     @Override
