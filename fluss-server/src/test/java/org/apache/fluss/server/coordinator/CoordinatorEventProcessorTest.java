@@ -20,6 +20,7 @@ package org.apache.fluss.server.coordinator;
 import org.apache.fluss.cluster.Endpoint;
 import org.apache.fluss.cluster.TabletServerInfo;
 import org.apache.fluss.cluster.rebalance.RebalancePlanForBucket;
+import org.apache.fluss.cluster.rebalance.RebalanceProgress;
 import org.apache.fluss.cluster.rebalance.RebalanceStatus;
 import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.config.Configuration;
@@ -2522,15 +2523,15 @@ class CoordinatorEventProcessorTest extends CoordinatorEventProcessorTestBase {
                 .isEqualTo(RebalanceStatus.REBALANCING);
     }
 
-    private void assertRebalanceStatus(TableBucket tableBucket, RebalanceStatus expectedStatus) {
-        assertThat(
-                        eventProcessor
-                                .getRebalanceManager()
-                                .listRebalanceProgress(null)
-                                .progressForBucketMap()
-                                .get(tableBucket)
-                                .status())
-                .isEqualTo(expectedStatus);
+    private void assertRebalanceStatus(TableBucket tableBucket, RebalanceStatus expectedStatus)
+            throws Exception {
+        RebalanceProgress progress =
+                fromCtx(ctx -> eventProcessor.getRebalanceManager().listRebalanceProgress(null));
+        assertThat(progress).isNotNull();
+        assertThat(progress.progressForBucketMap())
+                .hasEntrySatisfying(
+                        tableBucket,
+                        result -> assertThat(result.status()).isEqualTo(expectedStatus));
     }
 
     @Test
